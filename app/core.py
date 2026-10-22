@@ -25,7 +25,7 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pptx import Presentation
 from pptx.util import Inches
-from .slideshare import public_slide_urls, ViewerError
+from .slideshare import public_slide_urls, ViewerError, BrowserRequired
 
 MAX_INPUT_BYTES = 25 * 1024 * 1024
 MAX_SLIDES = 80
@@ -172,6 +172,13 @@ async def get_source_from_url(url: str, quality: str) -> tuple[str, list[bytes] 
         html = html_bytes.decode('utf-8', 'replace')
         try:
             deck_title, urls = public_slide_urls(html, url, quality, MAX_SLIDES)
+        except BrowserRequired:
+            from .browser import render_public_slideshare
+            html = await render_public_slideshare(url)
+            try:
+                deck_title, urls = public_slide_urls(html, url, quality, MAX_SLIDES)
+            except ViewerError as exc:
+                raise ConversionError(str(exc)) from exc
         except ViewerError as exc:
             raise ConversionError(str(exc)) from exc
         semaphore = asyncio.Semaphore(5)

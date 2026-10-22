@@ -14,10 +14,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements-browser.txt pytest
+      - run: python -m playwright install --with-deps --only-shell chromium
       - run: python -m pytest -q tests
       - name: Download the 49-slide public presentation through the API
         run: python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49
+      - name: Verify browser fallback with live viewer data and all 49 images
+        run: python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49 --force-browser
       - name: Diagnose real image downloads using captured public viewer metadata
         if: failure()
         run: python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49 tests/fixtures/hospital-public-viewer.html
@@ -27,15 +30,15 @@ jobs:
           name: verified-presentation-download
           path: artifacts/slideforge-live-download.zip
           retention-days: 3
-
-  browser-probe:
+  container-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.12'
-      - run: pip install playwright
-      - run: python -m playwright install --with-deps --only-shell chromium
-      - run: python tools/probe_browser.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771
+      - run: docker build -f Dockerfile.vercel -t slideforge-check .
+      - name: Start the production server and check health
+        run: |
+          docker run -d --name slideforge-check -p 127.0.0.1:8080:80 slideforge-check
+          curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/api/health
+      - name: Verify the browser-enabled production image
+        run: docker exec slideforge-check python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49 --force-browser

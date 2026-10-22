@@ -6,6 +6,7 @@ import asyncio
 import io
 import json
 import logging
+import importlib.util
 import zipfile
 from pathlib import Path
 from typing import Annotated
@@ -17,7 +18,7 @@ from .core import (MAX_JOBS, MAX_INPUT_BYTES, Source, ConversionError,
                    convert_source, get_source_from_url, safe_name)
 
 logger = logging.getLogger('slideforge')
-app = FastAPI(title='SlideForge', version='2.1.0', docs_url=None, redoc_url=None)
+app = FastAPI(title='SlideForge', version='2.2.0', docs_url=None, redoc_url=None)
 STATIC = Path(__file__).resolve().parent / 'static'
 app.mount('/static', StaticFiles(directory=STATIC), name='static')
 
@@ -27,7 +28,7 @@ async def home():
 
 @app.get('/api/health')
 async def health():
-    return {'status': 'ok', 'version': '2.1.0', 'source_mode': 'public-slides', 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
+    return {'status': 'ok', 'version': '2.2.0', 'source_mode': 'public-slides', 'browser_fallback': importlib.util.find_spec('playwright') is not None, 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
 
 async def prepare_file(f: UploadFile) -> tuple[str, Source]:
     filename = Path(f.filename or 'document').name

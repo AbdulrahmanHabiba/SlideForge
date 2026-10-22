@@ -145,3 +145,32 @@ def test_malformed_pdf_does_not_succeed():
     r = client.post('/api/convert', data={'urls': '[]', 'fmt': 'both', 'quality': 'hd'},
                     files=[('files', ('fake.pdf', b'%PDF-broken', 'application/pdf'))])
     assert r.status_code == 422
+
+
+def test_challenge_uses_browser_and_then_downloads_images(monkeypatch):
+    from pathlib import Path
+    fixture = (Path(__file__).parent / 'fixtures' / 'hospital-public-viewer.html').read_text()
+    async def fetch(url, max_bytes=0):
+        if 'www.slideshare.net' in url:
+            return b'<title>Client Challenge</title>', 'text/html', url
+        return image_data(), 'image/png', url
+    render = AsyncMock(return_value=fixture)
+    monkeypatch.setattr('app.core.fetch_public', fetch)
+    monkeypatch.setattr('app.browser.render_public_slideshare', render)
+    r = client.post('/api/download', data={'urls': '["https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771"]', 'fmt': 'pdf', 'quality': 'sd'})
+    assert r.status_code == 200
+    render.assert_awaited_once()
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        item = json.loads(archive.read('manifest.json'))['items'][0]
+        with fitz.open(stream=archive.read(item['files'][0]['name']), filetype='pdf') as pdf:
+            assert len(pdf) == 49
+
+
+def test_private_viewer_is_not_retried_in_browser(monkeypatch):
+    fixture = '<script id="__NEXT_DATA__">' + json.dumps({'props': {'pageProps': {'slideshow': {'isPrivate': True}}}}) + '</script>'
+    monkeypatch.setattr('app.core.fetch_public', AsyncMock(return_value=(fixture.encode(), 'text/html', 'https://www.slideshare.net/slideshow/private/123')))
+    render = AsyncMock()
+    monkeypatch.setattr('app.browser.render_public_slideshare', render)
+    r = client.post('/api/download', data={'urls': '["https://www.slideshare.net/slideshow/private/123"]', 'fmt': 'pdf', 'quality': 'sd'})
+    assert r.status_code == 422
+    render.assert_not_awaited()
