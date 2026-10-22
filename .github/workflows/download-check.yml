@@ -18,7 +18,11 @@ jobs:
       - run: python -m pytest -q tests
       - name: Download the 49-slide public presentation through the API
         run: python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49
+      - name: Diagnose real image downloads using captured public viewer metadata
+        if: failure()
+        run: python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49 tests/fixtures/hospital-public-viewer.html
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && hashFiles('artifacts/slideforge-live-download.zip') != ''
         with:
           name: verified-presentation-download
           path: artifacts/slideforge-live-download.zip

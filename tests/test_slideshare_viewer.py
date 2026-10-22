@@ -51,6 +51,10 @@ class PublicViewerTests(unittest.TestCase):
         with self.assertRaises(ViewerError):
             public_slide_urls('<html>Sign in</html>', URL, 'hd', 80)
 
+    def test_browser_challenge_has_an_actionable_error(self):
+        with self.assertRaisesRegex(ViewerError, 'browser verification challenge'):
+            public_slide_urls('<html><title>Client Challenge</title></html>', URL, 'hd', 80)
+
 
 if __name__ == '__main__':
     unittest.main()

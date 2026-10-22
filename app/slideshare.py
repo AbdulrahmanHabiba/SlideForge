@@ -31,6 +31,8 @@ class _PageData(HTMLParser):
 
 
 def public_slide_urls(html: str, page_url: str, quality: str, max_slides: int) -> tuple[str, list[str]]:
+    if re.search(r'<title[^>]*>\s*Client Challenge\s*</title>', html, re.I):
+        raise ViewerError('SlideShare sent a browser verification challenge to this server, not the presentation. No slides could be downloaded. This link needs a normal browser session.')
     parser = _PageData()
     parser.feed(html)
     try:

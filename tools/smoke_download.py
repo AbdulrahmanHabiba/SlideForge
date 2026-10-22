@@ -17,9 +17,21 @@ from bs4 import BeautifulSoup
 
 url = sys.argv[1]
 expected = int(sys.argv[2])
+if len(sys.argv) > 3:
+    # Diagnostic only: use previously captured public viewer metadata while
+    # downloading every real image from its declared public CDN URL.
+    from app import core
+    fixture = Path(sys.argv[3]).read_bytes()
+    original_fetch = core.fetch_public
+    async def with_captured_viewer(requested, max_bytes=core.MAX_INPUT_BYTES):
+        if requested == url:
+            return fixture, 'text/html', url
+        return await original_fetch(requested, max_bytes=max_bytes)
+    core.fetch_public = with_captured_viewer
+    print('Diagnostic: viewer metadata is a captured fixture; image downloads are live.')
 with TestClient(app) as client:
     response = client.post('/api/download', data={'urls': json.dumps([url]), 'fmt': 'both', 'quality': 'sd'})
-if response.status_code != 200:
+if response.status_code != 200 and len(sys.argv) == 3:
     raw, content_type, final_url = asyncio.run(fetch_public(url, max_bytes=3 * 1024 * 1024))
     soup = BeautifulSoup(raw, 'html.parser')
     print('Source diagnostics:', {'bytes': len(raw), 'content_type': content_type,
