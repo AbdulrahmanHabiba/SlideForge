@@ -48,7 +48,7 @@ async def render_public_slideshare(url: str) -> str:
                         await context.route('**/*', public_request)
                         page = await context.new_page()
                         await page.goto(url, wait_until='domcontentloaded', timeout=20000)
-                        await page.wait_for_function("document.querySelector('script#__NEXT_DATA__') !== null", timeout=30000)
+                        await page.locator('script#__NEXT_DATA__').wait_for(state='attached', timeout=30000)
                         html = await page.content()
                         if len(html.encode('utf-8')) > 3 * 1024 * 1024:
                             raise ConversionError('The public viewer page exceeds the supported size.')
@@ -60,3 +60,4 @@ async def render_public_slideshare(url: str) -> str:
         except BrowserError as exc:
             logging.getLogger('slideforge').exception('Public viewer browser failed')
             raise ConversionError('The server browser could not open SlideShare. Check that the browser-enabled deployment is installed.') from exc
+
