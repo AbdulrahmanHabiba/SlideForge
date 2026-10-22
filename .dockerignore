@@ -1,0 +1,9 @@
+*.png
+*.pdf
+preview.html
+__pycache__
+.venv
+.pytest_cache
+.git
+.gitignore
+tests
