@@ -27,3 +27,15 @@ jobs:
           name: verified-presentation-download
           path: artifacts/slideforge-live-download.zip
           retention-days: 3
+
+  browser-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - run: python -m playwright install --with-deps --only-shell chromium
+      - run: python tools/probe_browser.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771
