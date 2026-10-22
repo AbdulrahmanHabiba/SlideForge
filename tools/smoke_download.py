@@ -1,0 +1,35 @@
+"""Exercise a real public link through the download API and inspect both files."""
+import io
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+import fitz
+from fastapi.testclient import TestClient
+from pptx import Presentation
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.main import app
+
+url = sys.argv[1]
+expected = int(sys.argv[2])
+with TestClient(app) as client:
+    response = client.post('/api/download', data={'urls': json.dumps([url]), 'fmt': 'both', 'quality': 'sd'})
+assert response.status_code == 200, response.text[:2000]
+assert response.headers['content-type'].startswith('application/zip')
+with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+    item = json.loads(archive.read('manifest.json'))['items'][0]
+    assert not item['error'], item
+    assert item['note'], item
+    for info in item['files']:
+        raw = archive.read(info['name'])
+        if info['format'] == 'pdf':
+            with fitz.open(stream=raw, filetype='pdf') as pdf:
+                assert len(pdf) == expected, len(pdf)
+        else:
+            assert len(Presentation(io.BytesIO(raw)).slides) == expected
+        print(f"Verified {info['format']}: {expected} slides, {len(raw)} bytes")
+Path('artifacts').mkdir(exist_ok=True)
+Path('artifacts/slideforge-live-download.zip').write_bytes(response.content)
+print(f'API returned a valid ZIP: {len(response.content)} bytes')

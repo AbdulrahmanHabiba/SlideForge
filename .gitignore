@@ -7,5 +7,6 @@ venv/
 .env.*
 !.env.example
 .vercel/
+artifacts/
 .DS_Store
 Thumbs.db
