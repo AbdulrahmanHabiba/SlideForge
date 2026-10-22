@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from urllib.parse import urlparse
 
 _browser_pool = asyncio.Semaphore(1)
@@ -57,4 +58,5 @@ async def render_public_slideshare(url: str) -> str:
         except (TimeoutError, BrowserTimeout) as exc:
             raise ConversionError('SlideShare still requires browser verification. No slides were downloaded; interactive challenges cannot be completed automatically.') from exc
         except BrowserError as exc:
+            logging.getLogger('slideforge').exception('Public viewer browser failed')
             raise ConversionError('The server browser could not open SlideShare. Check that the browser-enabled deployment is installed.') from exc

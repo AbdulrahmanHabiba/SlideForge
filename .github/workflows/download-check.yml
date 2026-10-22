@@ -39,6 +39,6 @@ jobs:
       - name: Start the production server and check health
         run: |
           docker run -d --name slideforge-check -p 127.0.0.1:8080:80 slideforge-check
-          curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/api/health
+          curl --fail --retry 10 --retry-delay 1 --retry-all-errors --max-time 10 http://127.0.0.1:8080/api/health
       - name: Verify the browser-enabled production image
         run: docker exec slideforge-check python tools/smoke_download.py https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771 49 --force-browser
