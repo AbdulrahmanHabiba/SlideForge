@@ -1,5 +1,6 @@
 """Exercise a real public link through the download API and inspect both files."""
 import io
+import asyncio
 import json
 import sys
 import zipfile
@@ -11,11 +12,22 @@ from pptx import Presentation
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.main import app
+from app.core import fetch_public
+from bs4 import BeautifulSoup
 
 url = sys.argv[1]
 expected = int(sys.argv[2])
 with TestClient(app) as client:
     response = client.post('/api/download', data={'urls': json.dumps([url]), 'fmt': 'both', 'quality': 'sd'})
+if response.status_code != 200:
+    raw, content_type, final_url = asyncio.run(fetch_public(url, max_bytes=3 * 1024 * 1024))
+    soup = BeautifulSoup(raw, 'html.parser')
+    print('Source diagnostics:', {'bytes': len(raw), 'content_type': content_type,
+          'title': soup.title.get_text() if soup.title else None,
+          'script_ids': [tag.get('id') for tag in soup.find_all('script') if tag.get('id')],
+          'has_viewer_metadata': b'__NEXT_DATA__' in raw,
+          'public_image_count': len(soup.select('img[src*="image.slidesharecdn.com"]')),
+          'text_start': soup.get_text(' ', strip=True)[:600]})
 assert response.status_code == 200, response.text[:2000]
 assert response.headers['content-type'].startswith('application/zip')
 with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
