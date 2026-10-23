@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import tempfile
 from urllib.parse import urlparse
 
 _browser_pool = asyncio.Semaphore(1)
@@ -28,9 +29,17 @@ async def render_public_slideshare(url: str) -> str:
                     except Exception as exc:
                         logging.getLogger('slideforge').exception('Bundled browser initialization failed')
                         raise ConversionError(f'Browser package initialization failed ({type(exc).__name__}): {str(exc)[:240]}') from exc
-                    browser = await playwright.chromium.launch(timeout=15000, **options)
+                    profile = None
+                    browser = None
+                    context = None
                     try:
-                        context = await browser.new_context(service_workers='block')
+                        if options.get('executable_path'):
+                            profile = tempfile.TemporaryDirectory(prefix='slideforge-browser-')
+                            context = await playwright.chromium.launch_persistent_context(
+                                profile.name, timeout=15000, service_workers='block', **options)
+                        else:
+                            browser = await playwright.chromium.launch(timeout=15000, **options)
+                            context = await browser.new_context(service_workers='block')
                         public_hosts = set()
 
                         async def public_request(route):
@@ -65,7 +74,12 @@ async def render_public_slideshare(url: str) -> str:
                             raise ConversionError('The public viewer page exceeds the supported size.')
                         return html
                     finally:
-                        await browser.close()
+                        if context is not None:
+                            await context.close()
+                        if browser is not None:
+                            await browser.close()
+                        if profile is not None:
+                            profile.cleanup()
         except (TimeoutError, BrowserTimeout) as exc:
             raise ConversionError('SlideShare still requires browser verification. No slides were downloaded; interactive challenges cannot be completed automatically.') from exc
         except BrowserError as exc:

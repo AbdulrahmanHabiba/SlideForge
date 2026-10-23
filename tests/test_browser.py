@@ -34,7 +34,7 @@ class BrowserRoutingTests(unittest.TestCase):
         request.is_navigation_request.return_value = navigation
         request.frame = page.main_frame if main else object()
         route = Mock(request=request, abort=AsyncMock(), continue_=AsyncMock())
-        context = Mock(new_page=AsyncMock(return_value=page))
+        context = Mock(new_page=AsyncMock(return_value=page), close=AsyncMock())
 
         async def register(pattern, handler):
             context.handler = handler
@@ -53,7 +53,7 @@ class BrowserRoutingTests(unittest.TestCase):
         api.async_playwright = Mock(return_value=manager)
         api.TimeoutError = type('BrowserTimeout', (Exception,), {})
         api.Error = type('BrowserError', (Exception,), {})
-        with patch.dict(sys.modules, {'app.core': core, 'playwright.async_api': api}):
+        with patch('app.serverless_browser.launch_options', return_value={}), patch.dict(sys.modules, {'app.core': core, 'playwright.async_api': api}):
             html = asyncio.run(render_public_slideshare('https://www.slideshare.net/slideshow/demo/123'))
         self.assertIn('__NEXT_DATA__', html)
         browser.close.assert_awaited_once()
