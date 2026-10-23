@@ -6,3 +6,5 @@ beautifulsoup4>=4.12,<5
 PyMuPDF>=1.24,<2
 Pillow>=10,<13
 python-pptx>=1.0,<2
+playwright==1.64.1
+Brotli>=1.1,<2

@@ -10,3 +10,4 @@ venv/
 artifacts/
 .DS_Store
 Thumbs.db
+app/browser_bin/
