@@ -84,5 +84,7 @@ async def render_public_slideshare(url: str) -> str:
             raise ConversionError('SlideShare still requires browser verification. No slides were downloaded; interactive challenges cannot be completed automatically.') from exc
         except BrowserError as exc:
             logging.getLogger('slideforge').exception('Public viewer browser failed')
-            raise ConversionError('The server browser could not open SlideShare. Check that the browser-enabled deployment is installed.') from exc
+            lines = [line for line in str(exc).splitlines() if any(marker in line for marker in ('ERROR:', 'FATAL:', 'error while loading', 'exitCode=', 'signal=', 'Protocol error'))]
+            detail = ' '.join(lines)[-1000:] if lines else str(exc)[:500]
+            raise ConversionError(f'The server browser failed ({type(exc).__name__}): {detail}') from exc
 
