@@ -60,7 +60,7 @@ async def render_public_slideshare(url: str) -> str:
                             await route.continue_()
 
                         await context.route('**/*', public_request)
-                        page = await context.new_page()
+                        page = context.pages[0] if options.get('executable_path') and context.pages else await context.new_page()
                         await page.goto(url, wait_until='domcontentloaded', timeout=20000)
                         try:
                             await page.locator('script#__NEXT_DATA__').wait_for(state='attached', timeout=30000)
