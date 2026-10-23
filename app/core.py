@@ -158,7 +158,7 @@ def explicitly_downloadable(html: str) -> bool:
     allow = r'["\'](?:allow_download|allowDownload|is_downloadable|downloadable|downloadEnabled)["\']\s*:\s*true'
     return bool(re.search(allow, html, re.I)) and not bool(re.search(deny, html, re.I))
 
-async def get_source_from_url(url: str, quality: str) -> tuple[str, list[bytes] | Source]:
+async def get_source_from_url(url: str, quality: str, prefer_browser: bool = False) -> tuple[str, list[bytes] | Source]:
     url = validate_url(url)
     host = urlparse(url).hostname.lower()
     if host == 'academia.edu' or host.endswith('.academia.edu'):
@@ -166,13 +166,20 @@ async def get_source_from_url(url: str, quality: str) -> tuple[str, list[bytes] 
     if host == 'scribd.com' or host.endswith('.scribd.com'):
         raise ConversionError('Scribd pages do not offer a supported public file API. Use Scribd’s official download option for an authorized copy, then upload it here.')
     if host in {'slideshare.net', 'www.slideshare.net'} or host.endswith('.slideshare.net'):
-        html_bytes, ctype, _ = await fetch_public(url, max_bytes=3 * 1024 * 1024)
+        if prefer_browser:
+            from .browser import render_public_slideshare
+            html_bytes = (await render_public_slideshare(url)).encode('utf-8')
+            ctype = 'text/html'
+        else:
+            html_bytes, ctype, _ = await fetch_public(url, max_bytes=3 * 1024 * 1024)
         if 'html' not in ctype.lower() and not html_bytes.lstrip().startswith(b'<!'):
             raise ConversionError('SlideShare did not return a presentation page.')
         html = html_bytes.decode('utf-8', 'replace')
         try:
             deck_title, urls = public_slide_urls(html, url, quality, MAX_SLIDES)
-        except BrowserRequired:
+        except BrowserRequired as exc:
+            if prefer_browser:
+                raise ConversionError(str(exc)) from exc
             from .browser import render_public_slideshare
             html = await render_public_slideshare(url)
             try:

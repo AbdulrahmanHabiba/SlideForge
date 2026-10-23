@@ -47,9 +47,10 @@ async def convert(
     urls: Annotated[str, Form()] = '[]',
     fmt: Annotated[str, Form()] = 'both',
     quality: Annotated[str, Form()] = 'hd',
+    fetch_mode: Annotated[str, Form()] = 'auto',
     files: list[UploadFile] | None = File(default=None),
 ):
-    if fmt not in ('pdf', 'pptx', 'both') or quality not in ('hd', 'sd'):
+    if fmt not in ('pdf', 'pptx', 'both') or quality not in ('hd', 'sd') or fetch_mode not in ('auto', 'browser'):
         raise HTTPException(422, 'Invalid format or quality.')
     try:
         links = json.loads(urls)
@@ -73,7 +74,10 @@ async def convert(
         async with pool:
             try:
                 if kind == 'link':
-                    name, source = await get_source_from_url(payload, quality)
+                    if fetch_mode == 'browser':
+                        name, source = await get_source_from_url(payload, quality, prefer_browser=True)
+                    else:
+                        name, source = await get_source_from_url(payload, quality)
                 else:
                     name, source = await prepare_file(payload)
                 # Pillow / PyMuPDF / LibreOffice are blocking, so offload CPU work.

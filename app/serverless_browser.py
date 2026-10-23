@@ -42,4 +42,4 @@ def launch_options() -> dict:
     env['XDG_CACHE_HOME'] = str(root / 'cache')
     env['LD_LIBRARY_PATH'] = ':'.join([str(root / 'al2023' / 'lib'), str(root), env.get('LD_LIBRARY_PATH', '')])
     return {'executable_path': str(root / 'chromium'), 'env': env,
-            'args': ['--single-process', '--no-zygote', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader']}
+            'args': ['--single-process', '--no-zygote', '--disable-dev-shm-usage', '--disable-features=IsolateOrigins,site-per-process', '--in-process-gpu', '--use-gl=angle', '--use-angle=swiftshader']}
