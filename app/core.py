@@ -1,6 +1,6 @@
 """Safe, bounded document ingestion and visual conversions for SlideForge.
 
-We only fetch open files / explicitly downloadable public SlideShare decks.
+We fetch open files and images exposed by public SlideShare viewers.
 No authentication, cookies, protected content, or anti-bot circumvention.
 """
 from __future__ import annotations
@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pptx import Presentation
 from pptx.util import Inches
+from .slideshare import public_slide_urls, ViewerError, BrowserRequired
 
 MAX_INPUT_BYTES = 25 * 1024 * 1024
 MAX_SLIDES = 80
@@ -169,11 +170,17 @@ async def get_source_from_url(url: str, quality: str) -> tuple[str, list[bytes] 
         if 'html' not in ctype.lower() and not html_bytes.lstrip().startswith(b'<!'):
             raise ConversionError('SlideShare did not return a presentation page.')
         html = html_bytes.decode('utf-8', 'replace')
-        if not explicitly_downloadable(html):
-            raise ConversionError('SlideShare download permission could not be verified. Please use its official Download button and upload the file.')
-        urls = slide_image_urls(html)
-        if not urls or len(urls) > MAX_SLIDES:
-            raise ConversionError('No complete public slide-image sequence was available. Try downloading the original file officially.')
+        try:
+            deck_title, urls = public_slide_urls(html, url, quality, MAX_SLIDES)
+        except BrowserRequired:
+            from .browser import render_public_slideshare
+            html = await render_public_slideshare(url)
+            try:
+                deck_title, urls = public_slide_urls(html, url, quality, MAX_SLIDES)
+            except ViewerError as exc:
+                raise ConversionError(str(exc)) from exc
+        except ViewerError as exc:
+            raise ConversionError(str(exc)) from exc
         semaphore = asyncio.Semaphore(5)
         async def load(image_url: str) -> bytes:
             async with semaphore:
@@ -182,8 +189,7 @@ async def get_source_from_url(url: str, quality: str) -> tuple[str, list[bytes] 
                     raise ConversionError('One of the slides did not return a supported image.')
                 return data
         images = await asyncio.gather(*(load(x) for x in urls))
-        title = BeautifulSoup(html, 'html.parser').title
-        name = safe_name(title.get_text(' ', strip=True).replace(' | SlideShare', '') if title else urlparse(url).path.split('/')[-1])
+        name = safe_name(deck_title)
         return name, images
     data, content_type, final_url = await fetch_public(url)
     if 'text/html' in content_type.lower() or data.lstrip()[:50].startswith((b'<!DOCTYPE html', b'<html')):

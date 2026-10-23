@@ -6,18 +6,19 @@ import asyncio
 import io
 import json
 import logging
+import importlib.util
 import zipfile
 from pathlib import Path
 from typing import Annotated
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from .core import (MAX_JOBS, MAX_INPUT_BYTES, Source, ConversionError,
                    convert_source, get_source_from_url, safe_name)
 
 logger = logging.getLogger('slideforge')
-app = FastAPI(title='SlideForge', version='1.0.0', docs_url=None, redoc_url=None)
+app = FastAPI(title='SlideForge', version='2.2.0', docs_url=None, redoc_url=None)
 STATIC = Path(__file__).resolve().parent / 'static'
 app.mount('/static', StaticFiles(directory=STATIC), name='static')
 
@@ -27,7 +28,7 @@ async def home():
 
 @app.get('/api/health')
 async def health():
-    return {'status': 'ok', 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
+    return {'status': 'ok', 'version': '2.2.0', 'source_mode': 'public-slides', 'browser_fallback': importlib.util.find_spec('playwright') is not None, 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
 
 async def prepare_file(f: UploadFile) -> tuple[str, Source]:
     filename = Path(f.filename or 'document').name
@@ -41,6 +42,7 @@ async def prepare_file(f: UploadFile) -> tuple[str, Source]:
     return name, Source(name, raw, suffix, 'upload')
 
 @app.post('/api/convert')
+@app.post('/api/download')
 async def convert(
     urls: Annotated[str, Form()] = '[]',
     fmt: Annotated[str, Form()] = 'both',
@@ -76,7 +78,8 @@ async def convert(
                     name, source = await prepare_file(payload)
                 # Pillow / PyMuPDF / LibreOffice are blocking, so offload CPU work.
                 results = await asyncio.to_thread(convert_source, source, quality, fmt)
-                return {'label': label, 'name': name, 'files': results, 'error': None}
+                return {'label': label, 'name': name, 'files': results, 'error': None,
+                        'note': 'Created from public slide images; this is not the original uploaded PowerPoint.' if isinstance(source, list) else None}
             except ConversionError as exc:
                 return {'label': label, 'name': safe_name(label), 'files': {}, 'error': str(exc)}
             except Exception:
@@ -100,12 +103,17 @@ async def convert(
                 filenames_used.add(filename.lower())
                 zf.writestr(filename, data)
                 entries.append({'name': filename, 'size': len(data), 'format': extension})
-            manifest.append({'source': item['label'], 'title': item['name'], 'files': entries, 'error': item['error']})
+            manifest.append({'source': item['label'], 'title': item['name'], 'files': entries, 'error': item['error'], 'note': item.get('note')})
         zf.writestr('manifest.json', json.dumps({'items': manifest, 'quality': quality}, ensure_ascii=False))
     if not any(x['files'] for x in manifest):
         return Response(content=json.dumps({'detail': 'No files could be converted.', 'items': manifest}),
                         media_type='application/json', status_code=422)
-    return Response(content=buf.getvalue(), media_type='application/zip', headers={
+    buf.seek(0)
+    async def archive_chunks():
+        while chunk := buf.read(64 * 1024):
+            yield chunk
+        buf.close()
+    return StreamingResponse(archive_chunks(), media_type='application/zip', headers={
         'Content-Disposition': 'attachment; filename="slideforge-batch.zip"',
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff',

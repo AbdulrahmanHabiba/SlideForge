@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+import shutil
 from unittest.mock import AsyncMock
 
 import fitz
@@ -86,6 +87,7 @@ def test_pdf_preserves_original_and_converts_to_powerpoint():
     assert len(Presentation(io.BytesIO(result['pptx'])).slides) == 1
 
 
+@pytest.mark.skipif(shutil.which('libreoffice') is None, reason='LibreOffice is not installed')
 def test_pptx_round_trip_to_pdf():
     presentation = Presentation()
     presentation.slides.add_slide(presentation.slide_layouts[6])
@@ -108,6 +110,16 @@ def test_batch_zip_end_to_end():
     assert len(Presentation(io.BytesIO(z.read('deck.pptx'))).slides) == 1
 
 
+def test_download_endpoint_returns_public_slide_note(monkeypatch):
+    monkeypatch.setattr('app.main.get_source_from_url', AsyncMock(return_value=('Public deck', [image_data()])))
+    r = client.post('/api/download', data={'urls': '["https://www.slideshare.net/slideshow/demo/123"]', 'fmt': 'both', 'quality': 'sd'})
+    assert r.status_code == 200
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    item = json.loads(z.read('manifest.json'))['items'][0]
+    assert len(item['files']) == 2
+    assert 'not the original' in item['note']
+
+
 def test_mixed_batch_partial_failure():
     r = client.post('/api/convert', data={'urls': '["not-a-link"]', 'fmt': 'pdf', 'quality': 'sd'},
                     files=[('files', ('good.png', image_data(), 'image/png'))])
@@ -118,8 +130,8 @@ def test_mixed_batch_partial_failure():
     assert items[1]['files']
 
 
-def test_batch_rejects_more_than_10():
-    r = client.post('/api/convert', data={'urls': json.dumps(['https://a.example.com/test.pdf'] * 11), 'fmt': 'both', 'quality': 'hd'})
+def test_batch_rejects_more_than_100():
+    r = client.post('/api/convert', data={'urls': json.dumps(['https://a.example.com/test.pdf'] * 101), 'fmt': 'both', 'quality': 'hd'})
     assert r.status_code == 422
 
 
@@ -133,3 +145,32 @@ def test_malformed_pdf_does_not_succeed():
     r = client.post('/api/convert', data={'urls': '[]', 'fmt': 'both', 'quality': 'hd'},
                     files=[('files', ('fake.pdf', b'%PDF-broken', 'application/pdf'))])
     assert r.status_code == 422
+
+
+def test_challenge_uses_browser_and_then_downloads_images(monkeypatch):
+    from pathlib import Path
+    fixture = (Path(__file__).parent / 'fixtures' / 'hospital-public-viewer.html').read_text()
+    async def fetch(url, max_bytes=0):
+        if 'www.slideshare.net' in url:
+            return b'<title>Client Challenge</title>', 'text/html', url
+        return image_data(), 'image/png', url
+    render = AsyncMock(return_value=fixture)
+    monkeypatch.setattr('app.core.fetch_public', fetch)
+    monkeypatch.setattr('app.browser.render_public_slideshare', render)
+    r = client.post('/api/download', data={'urls': '["https://www.slideshare.net/slideshow/hospital-fire-safety-250965771/250965771"]', 'fmt': 'pdf', 'quality': 'sd'})
+    assert r.status_code == 200
+    render.assert_awaited_once()
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        item = json.loads(archive.read('manifest.json'))['items'][0]
+        with fitz.open(stream=archive.read(item['files'][0]['name']), filetype='pdf') as pdf:
+            assert len(pdf) == 49
+
+
+def test_private_viewer_is_not_retried_in_browser(monkeypatch):
+    fixture = '<script id="__NEXT_DATA__">' + json.dumps({'props': {'pageProps': {'slideshow': {'isPrivate': True}}}}) + '</script>'
+    monkeypatch.setattr('app.core.fetch_public', AsyncMock(return_value=(fixture.encode(), 'text/html', 'https://www.slideshare.net/slideshow/private/123')))
+    render = AsyncMock()
+    monkeypatch.setattr('app.browser.render_public_slideshare', render)
+    r = client.post('/api/download', data={'urls': '["https://www.slideshare.net/slideshow/private/123"]', 'fmt': 'pdf', 'quality': 'sd'})
+    assert r.status_code == 422
+    render.assert_not_awaited()

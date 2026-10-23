@@ -118,7 +118,7 @@
     resultEmpty.hidden = true;
     const ok = manifest.items.filter((item) => item.files.length).length;
     const bad = manifest.items.length - ok;
-    resultDescription.textContent = `${ok} item${ok === 1 ? '' : 's'} converted${bad ? ` · ${bad} couldn't be processed` : ' successfully'}. Download your files below.`;
+    resultDescription.textContent = `${ok} item${ok === 1 ? '' : 's'} prepared${bad ? ` · ${bad} couldn't be processed` : ' successfully'}. Download your files below.`;
     for (const item of manifest.items) {
       const row = document.createElement('div'); row.className = 'result-entry';
       const head = document.createElement('div'); head.className = 'result-entry-head';
@@ -127,6 +127,11 @@
       const details = document.createElement('div');
       const name = document.createElement('p'); name.className = 'result-entry-title'; name.textContent = item.title;
       details.appendChild(name);
+      if (item.note) {
+        const note = document.createElement('small');
+        note.textContent = item.note;
+        details.appendChild(note);
+      }
       if (item.error) {
         const err = document.createElement('div'); err.className = 'result-entry-error'; err.textContent = item.error;
         details.appendChild(err);
@@ -173,7 +178,7 @@
     processButton.querySelector('.button-default').hidden = true;
     processButton.querySelector('.button-loading').hidden = false;
     try {
-      const response = await fetch('/api/convert', {method: 'POST', body: fd});
+      const response = await fetch('/api/download', {method: 'POST', body: fd});
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
         const details = result.items?.map((item) => `${item.title}: ${item.error}`).join(' | ');
