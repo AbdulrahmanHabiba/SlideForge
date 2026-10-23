@@ -29,13 +29,12 @@ async def render_public_slideshare(url: str) -> str:
 
                         async def public_request(route):
                             request = route.request
-                            if request.resource_type in {'image', 'media', 'font'}:
-                                await route.abort()
-                                return
                             try:
                                 target = validate_url(request.url)
                                 host = urlparse(target).hostname
-                                if request.is_navigation_request() and host not in {'slideshare.net', 'www.slideshare.net'}:
+                                if (request.is_navigation_request()
+                                        and request.frame == page.main_frame
+                                        and host not in {'slideshare.net', 'www.slideshare.net'}):
                                     raise ConversionError('The viewer navigated away from SlideShare.')
                                 if host not in public_hosts:
                                     await _resolve_public(host)
@@ -48,7 +47,13 @@ async def render_public_slideshare(url: str) -> str:
                         await context.route('**/*', public_request)
                         page = await context.new_page()
                         await page.goto(url, wait_until='domcontentloaded', timeout=20000)
-                        await page.locator('script#__NEXT_DATA__').wait_for(state='attached', timeout=30000)
+                        try:
+                            await page.locator('script#__NEXT_DATA__').wait_for(state='attached', timeout=30000)
+                        except BrowserTimeout:
+                            logging.getLogger('slideforge').warning(
+                                'Public viewer metadata timed out: url=%s title=%s',
+                                page.url, await page.title())
+                            raise
                         html = await page.content()
                         if len(html.encode('utf-8')) > 3 * 1024 * 1024:
                             raise ConversionError('The public viewer page exceeds the supported size.')
