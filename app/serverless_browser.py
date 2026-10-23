@@ -61,5 +61,7 @@ def launch_options() -> dict:
     env['FONTCONFIG_PATH'] = str(root / 'fonts')
     env['XDG_CACHE_HOME'] = str(root / 'cache')
     env['LD_LIBRARY_PATH'] = ':'.join([str(root / 'al2023' / 'lib'), str(root), env.get('LD_LIBRARY_PATH', '')])
-    return {'executable_path': str(root / 'chromium'), 'env': env,
-            'args': ['--no-zygote', '--disable-dev-shm-usage', '--in-process-gpu', '--use-gl=angle', '--use-angle=swiftshader']}
+    log = root / 'native.log'
+    log.write_text('')
+    return {'_diagnostic_log': str(log), 'executable_path': str(root / 'chromium'), 'env': env,
+            'args': ['--enable-logging', f'--log-file={log}', '--log-level=2', '--no-zygote', '--disable-dev-shm-usage', '--in-process-gpu', '--use-gl=angle', '--use-angle=swiftshader']}

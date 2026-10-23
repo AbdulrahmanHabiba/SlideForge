@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+from pathlib import Path
 from urllib.parse import urlparse
 
 _browser_pool = asyncio.Semaphore(1)
@@ -20,6 +21,7 @@ async def render_public_slideshare(url: str) -> str:
         raise ConversionError('This server needs the browser-enabled deployment to open SlideShare verification pages.') from exc
 
     async with _browser_pool:
+        diagnostic_log = None
         try:
             async with asyncio.timeout(60):
                 async with async_playwright() as playwright:
@@ -29,6 +31,7 @@ async def render_public_slideshare(url: str) -> str:
                     except Exception as exc:
                         logging.getLogger('slideforge').exception('Bundled browser initialization failed')
                         raise ConversionError(f'Browser package initialization failed ({type(exc).__name__}): {str(exc)[:240]}') from exc
+                    diagnostic_log = options.pop('_diagnostic_log', None)
                     profile = None
                     browser = None
                     context = None
@@ -85,6 +88,9 @@ async def render_public_slideshare(url: str) -> str:
         except BrowserError as exc:
             logging.getLogger('slideforge').exception('Public viewer browser failed')
             lines = [line for line in str(exc).splitlines() if any(marker in line for marker in ('ERROR:', 'FATAL:', 'error while loading', 'exitCode=', 'signal=', 'Protocol error'))]
-            detail = ' '.join(lines)[-1000:] if lines else str(exc)[:500]
+            if diagnostic_log and Path(diagnostic_log).is_file():
+                native = Path(diagnostic_log).read_text(errors='replace')[-12000:]
+                lines.extend(line for line in native.splitlines() if any(marker in line for marker in ('FATAL:', 'ERROR:', 'Check failed')))
+            detail = ' '.join(lines)[-1400:] if lines else str(exc)[:500]
             raise ConversionError(f'The server browser failed ({type(exc).__name__}): {detail}') from exc
 

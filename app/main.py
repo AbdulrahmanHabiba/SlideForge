@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import importlib.util
+import os
 import zipfile
 from pathlib import Path
 from typing import Annotated
@@ -28,7 +29,7 @@ async def home():
 
 @app.get('/api/health')
 async def health():
-    return {'status': 'ok', 'version': '2.3.0', 'source_mode': 'public-slides', 'browser_fallback': importlib.util.find_spec('playwright') is not None, 'browser_bundle': (Path(__file__).parent / 'browser_bin' / 'chromium.br').is_file(), 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
+    return {'status': 'ok', 'version': '2.3.0', 'source_mode': 'public-slides', 'browser_fallback': importlib.util.find_spec('playwright') is not None, 'browser_bundle': (Path(__file__).parent / 'browser_bin' / 'chromium.br').is_file(), 'memory_limit_mb': os.getenv('AWS_LAMBDA_FUNCTION_MEMORY_SIZE'), 'max_links': MAX_JOBS, 'formats': ['pdf', 'pptx'], 'max_pages': 80}
 
 async def prepare_file(f: UploadFile) -> tuple[str, Source]:
     filename = Path(f.filename or 'document').name
