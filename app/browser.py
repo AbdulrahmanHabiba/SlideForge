@@ -23,7 +23,11 @@ async def render_public_slideshare(url: str) -> str:
             async with asyncio.timeout(60):
                 async with async_playwright() as playwright:
                     from .serverless_browser import launch_options
-                    options = await asyncio.to_thread(launch_options)
+                    try:
+                        options = await asyncio.to_thread(launch_options)
+                    except Exception as exc:
+                        logging.getLogger('slideforge').exception('Bundled browser initialization failed')
+                        raise ConversionError(f'Browser package initialization failed ({type(exc).__name__}): {str(exc)[:240]}') from exc
                     browser = await playwright.chromium.launch(timeout=15000, **options)
                     try:
                         context = await browser.new_context(service_workers='block')
